@@ -1,9 +1,11 @@
 // Worker: envía al portal los rangos pendientes de cada alojamiento, reservándolo con un lease.
 // Bucle en el mismo proceso que el servidor HTTP. El ritmo lo marca el limitador del cliente,
 // no el bucle: tras un alojamiento sigue con el siguiente sin esperar; sin trabajo, duerme.
+// Si MongoDB falla, registra el error y duerme como sin trabajo: el bucle no muere.
 
 import { setTimeout as delay } from 'node:timers/promises';
 import type { FastifyBaseLogger } from 'fastify';
+import { MongoError } from 'mongodb';
 import { addMs, now } from '../clock.js';
 import type { Config } from '../config.js';
 import { todayUtc } from '../dates.js';
@@ -82,14 +84,16 @@ export class SyncWorker {
 
   private async loop(signal: AbortSignal): Promise<void> {
     for (;;) {
-      let worked: boolean;
+      let worked = false;
       try {
         await this.sweep.runIfDayChanged();
         worked = await this.syncNext(signal);
       } catch (error) {
         // Una espera interrumpida por la parada no es un fallo.
         if (signal.aborted) return;
-        throw error;
+        // Los errores que no son de MongoDB (un bug) terminan el proceso, a propósito.
+        if (!(error instanceof MongoError)) throw error;
+        this.logger.error({ event: 'worker.storage_error', err: error }, 'Fallo de MongoDB en el worker');
       }
       if (!worked) await sleep(this.config.workerIdleMs, signal);
       if (signal.aborted) return;
@@ -114,6 +118,9 @@ export class SyncWorker {
     }
 
     let lease = reservation.doc.leaseUntil;
+    // Resultado de un PUT aún sin guardar. Si su escritura falla, el lease no se libera: el alojamiento
+    // se retoma al caducar y no antes, para no saltarse el margen tras un timeout (invariante 5).
+    let unsavedResult = false;
     try {
       for (;;) {
         // Antes de cada PUT se espera turno (limitador y pausa por `429`) y solo después se renueva
@@ -140,6 +147,7 @@ export class SyncWorker {
         // esperando turno) y se reenvía el estado vigente. Ni `attempts` ni el estado cambian.
         if (result.outcome === 'rate_limited') continue;
 
+        unsavedResult = true;
         if (result.outcome !== 'success') {
           // Al primer fallo se detiene: los rangos ya confirmados quedan confirmados.
           const { outcome } = result;
@@ -149,10 +157,12 @@ export class SyncWorker {
             // `outcome` ya está estrechado a los reintentables; `result.outcome` no, de ahí el spread.
             await this.recordFailure(id, range, { ...result, outcome }, at);
           }
+          unsavedResult = false;
           return true;
         }
 
         const confirmed = await this.repository.applySyncResult(id, (doc) => confirmRange(doc, sent, at));
+        unsavedResult = false;
         this.logger.info(
           {
             event: 'sync.put.succeeded',
@@ -168,7 +178,7 @@ export class SyncWorker {
         if (confirmed?.patch.pending === false) return true;
       }
     } finally {
-      await this.repository.releaseLease(id, lease);
+      if (!unsavedResult) await this.repository.releaseLease(id, lease);
     }
   }
 

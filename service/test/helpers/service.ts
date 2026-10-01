@@ -4,6 +4,7 @@
 
 import { buildApp } from '../../src/app.js';
 import { loadConfig, type Config } from '../../src/config.js';
+import { stopService } from '../../src/lifecycle.js';
 import { createMetrics } from '../../src/metrics/registry.js';
 import { PortalClient } from '../../src/portal/client.js';
 import { connectStorage, type Storage } from '../../src/storage/mongo.js';
@@ -76,10 +77,6 @@ export async function startService(
     url: `http://127.0.0.1:${String(address.port)}`,
     storage,
     logs,
-    close: async () => {
-      await worker.stop();
-      await app.close();
-      await storage.close();
-    },
+    close: () => stopService({ app, worker, storage }),
   };
 }

@@ -148,9 +148,9 @@ El ritmo lo marca el limitador, no el bucle. Un `429` a mitad de un alojamiento 
 
 **Arranque**: el servicio pone `leaseUntil: null` en todos los documentos; con una sola instancia, cualquier lease existente es de un proceso muerto. Después ejecuta el barrido.
 
-**Parada**: se interrumpen las esperas (bucle, limitador, pausa), se espera solo a la petición HTTP en curso (como máximo el timeout), se libera el lease y se cierra; tiempo máximo 20 s.
+**Parada**: se interrumpen las esperas (bucle, limitador, pausa), se espera solo a la petición HTTP en curso (como máximo el timeout), se libera el lease y se cierra; tiempo máximo 20 s. Si MongoDB falla al parar, el lease puede quedar sin liberar; el siguiente arranque lo limpia.
 
-**MongoDB caído**: si una operación del bucle falla, el worker registra el error y duerme `WORKER_IDLE_MS`; no muere.
+**MongoDB caído**: si una operación del bucle falla con un error de MongoDB, el worker lo registra (`worker.storage_error`) y duerme `WORKER_IDLE_MS`; no muere. Si lo que no se pudo guardar es el resultado de un PUT, el lease no se libera: el alojamiento se retoma cuando caduca, nunca antes, para no saltarse el margen tras un timeout (invariante 5). Limitación conocida: tras una caída, ese alojamiento espera hasta `LEASE_MS` y se retoma con `worker.lease_expired` aunque el envío no tardara. Los errores que no son de MongoDB (un bug) no se capturan y terminan el proceso, a propósito.
 
 ### Agrupación en rangos
 
@@ -195,7 +195,7 @@ Variables de entorno. Los valores por defecto sirven para el `docker-compose` lo
 | `TIMEOUT_GRACE_MS` | `30000` | Margen tras timeout o error de conexión |
 | `BACKOFF_BASE_MS` / `BACKOFF_MAX_MS` | `2000` / `300000` | Backoff |
 | `FAILING_THRESHOLD` | `5` | Fallos seguidos para `failing` |
-| `LEASE_MS` | `120000` | Duración del lease |
+| `LEASE_MS` | `120000` | Duración del lease. Debe ser mayor que `PORTAL_TIMEOUT_MS + TIMEOUT_GRACE_MS` (con los valores por defecto se cumple: 120 s frente a 45 s), para que el lease que no se libera al no poder guardar el resultado de un PUT cubra el margen tras timeout (invariante 5). No se comprueba en código |
 | `WORKER_IDLE_MS` | `1000` | Sueño del worker sin trabajo |
 | `SHUTDOWN_TIMEOUT_MS` | `20000` | Tiempo máximo de parada |
 | `LOG_LEVEL` | `info` | Nivel de log |
@@ -227,9 +227,12 @@ JSON por salida estándar con `pino`, nivel configurable. Cada línea lleva `eve
 | `portal.rate_limited` | warn | `429`, con `retryAfter`: la pausa aplicada, en segundos como la cabecera (con decimales si viene de una fecha HTTP) |
 | `sync.accommodation.failing` | error | Cruza el umbral de fallos (una vez, no en cada intento) |
 | `sync.accommodation.error` | error | Error permanente (`404` o `400`) |
-| `worker.lease_expired` | warn | Se retoma un alojamiento cuyo lease caducó con el proceso vivo (tardó más de 2 min) |
+| `worker.lease_expired` | warn | Se retoma un alojamiento cuyo lease caducó con el proceso vivo (tardó más de 2 min, o MongoDB cayó al guardar el resultado de un PUT) |
+| `worker.storage_error` | error | Una operación del bucle falla con un error de MongoDB; el worker duerme `WORKER_IDLE_MS` y sigue |
 | `worker.started` / `worker.stopped` | info | Arranque y parada del worker |
+| `sweep.completed` | info | Barrido de días pasados terminado, con los alojamientos revisados (`reviewed`) y los que pasan a `synced` (`settled`) |
 | `server.started` | info | Servidor HTTP escuchando, con el puerto |
+| `server.shutdown_failed` | error | La parada falla o supera `SHUTDOWN_TIMEOUT_MS`; el proceso sale con código 1 |
 | `http.request` | info | Una por petición al servicio (desde un hook `onResponse`), con `reqId`, método, ruta, código y `durationMs`. Los logs de petición propios de Fastify se desactivan |
 | `http.storage_unavailable` | error | MongoDB no disponible al atender una petición (`503 STORAGE_UNAVAILABLE`), con el error |
 | `http.internal_error` | error | Fallo inesperado al atender una petición (`500 INTERNAL_ERROR`), con el error; la respuesta no lleva detalles internos |

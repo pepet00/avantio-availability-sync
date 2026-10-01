@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, type Config } from './config.js';
+import { handleShutdownSignals } from './lifecycle.js';
 import { createMetrics } from './metrics/registry.js';
 import { PortalClient } from './portal/client.js';
 import { connectStorage, type Storage } from './storage/mongo.js';
@@ -55,3 +56,5 @@ app.log.info({ event: 'server.started', port }, 'Servicio escuchando');
 const portal = new PortalClient(config, { logger: app.log, metrics });
 const worker = new SyncWorker({ repository, portal, logger: app.log, config, metrics, sweep });
 worker.start();
+
+handleShutdownSignals({ app, worker, storage }, { timeoutMs: config.shutdownTimeoutMs, logger: app.log });

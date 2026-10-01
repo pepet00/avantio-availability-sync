@@ -267,7 +267,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T13 — Parada ordenada y MongoDB caído
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: cerrar el servicio sin dejar trabajo a medias ni leases colgados, y hacer que el worker sobreviva a una caída de MongoDB.
 
