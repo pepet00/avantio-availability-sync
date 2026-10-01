@@ -32,7 +32,7 @@ Servicio que recibe cambios de disponibilidad y precio de alojamientos por HTTP,
 
 - No se comprueba si el alojamiento existe en el portal: haría depender la aceptación de que el portal esté disponible y gastaría cuota. Si no existe, acabará en `error`.
 - Un día cuyos valores coinciden con los guardados no cambia de versión ni se reenvía: la cuota es escasa.
-- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`) aunque el update no cambie ningún valor, porque es la única forma de pedir un nuevo intento; esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`) salvo si ya está en `failing`, para no gastar cuota con el portal caído; tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5).
+- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`) aunque el update no cambie ningún valor, porque es la única forma de pedir un nuevo intento; esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`) salvo si ya está en `failing`, para no gastar cuota con el portal caído; tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5). Si el update adelanta el reintento mientras un PUT está en camino y ese PUT falla, manda el fallo: se aplica su backoff y el adelanto se pierde, porque el fallo es información más nueva sobre el portal.
 
 Respuesta `202`, solo cuando el cambio está escrito en MongoDB:
 
@@ -137,7 +137,7 @@ No hay colección de updates: el log `update.accepted` deja constancia de cada u
 
 Bucle en el mismo proceso que el servidor HTTP:
 
-1. Reserva atómicamente (`findOneAndUpdate`) un alojamiento con `pending: true`, `nextAttemptAt <= ahora` y sin lease activo, fijando `leaseUntil = ahora + 2 min`. Renueva el lease antes de cada PUT: muchos rangos con timeouts y esperas pueden superar los 2 minutos.
+1. Reserva atómicamente (`findOneAndUpdate`) un alojamiento con `pending: true`, `nextAttemptAt <= ahora` y sin lease activo, fijando `leaseUntil = ahora + 2 min`. Renueva el lease antes de cada PUT: muchos rangos con timeouts y esperas pueden superar los 2 minutos. Si al renovarlo resulta que se ha perdido, el resultado del PUT ya recibido se escribe igualmente y el worker deja ese alojamiento: con una sola instancia y la condición de `rev` es seguro.
 2. Envía sus rangos uno a uno. **Al primer fallo se detiene**: actualiza `attempts` y `nextAttemptAt`, libera el lease y pasa al siguiente; los rangos ya confirmados quedan confirmados. Repite sin esperar; si no hay nada, duerme 1 s.
 
 El ritmo lo marca el limitador, no el bucle. Un `429` a mitad de un alojamiento se espera manteniendo el lease: la pausa es global y soltarlo no ayudaría.

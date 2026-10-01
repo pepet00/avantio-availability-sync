@@ -3,9 +3,11 @@
 
 import { addMs } from '../clock.js';
 import type { Config } from '../config.js';
-import { enumerateDays, type Day } from '../dates.js';
-import type { AccommodationDoc, SyncStatus } from '../storage/types.js';
-import type { DesiredDay } from './grouping.js';
+import { enumerateDays, todayUtc, type Day } from '../dates.js';
+import type { PortalError } from '../portal/client.js';
+import type { AccommodationDoc, LastError, SyncStatus } from '../storage/types.js';
+import { backoffDelayMs, type BackoffConfig } from './backoff.js';
+import { groupPendingRanges, type DesiredDay, type PendingRange } from './grouping.js';
 
 /** Update ya validado (las fechas son días reales, `from` es de hoy o posterior). */
 export interface AccommodationUpdate {
@@ -87,6 +89,90 @@ export function applyUpdate(
   // Esperando por `5xx`/`401` (o ya programado): se adelanta a ahora, nunca se retrasa.
   return { ...patch, nextAttemptAt: earliest(at, scheduled) };
 }
+
+/**
+ * Campos que escribe el worker. Los ausentes no cambian; `syncedVersions` lleva solo los días que
+ * pasan a sincronizados, con la versión confirmada.
+ */
+export interface SyncPatch {
+  syncedVersions?: Record<string, number>;
+  pending?: boolean;
+  pendingSince?: Date | null;
+  nextAttemptAt?: Date | null;
+  attempts?: number;
+  status?: SyncStatus;
+  lastError?: LastError | null;
+  lastSyncedAt?: Date;
+}
+
+/** Versión de cada día del rango tal como se envía: la que confirmará un `200`. */
+export function sentVersions(days: Readonly<Record<string, DesiredDay>>, range: PendingRange): Record<string, number> {
+  const versions: Record<string, number> = {};
+  for (const day of enumerateDays(range.from, range.to)) {
+    const state = days[day];
+    if (state === undefined) throw new RangeError(`El rango ${range.from} → ${range.to} incluye un día sin estado: ${day}`);
+    versions[day] = state.version;
+  }
+  return versions;
+}
+
+/**
+ * Tras un `200` en el instante `at`: se marcan sincronizados los días enviados cuya versión no
+ * cambió mientras el PUT estaba en camino (invariante 2). Los demás siguen pendientes y se
+ * reenviarán con su valor nuevo.
+ */
+export function confirmRange(current: AccommodationDoc, sent: Readonly<Record<string, number>>, at: Date): SyncPatch {
+  const days = { ...current.days };
+  const syncedVersions: Record<string, number> = {};
+  for (const [day, version] of Object.entries(sent)) {
+    const state = current.days[day];
+    if (state?.version !== version) continue;
+    syncedVersions[day] = version;
+    days[day] = { ...state, syncedVersion: version };
+  }
+
+  const remaining = groupPendingRanges(days, todayUtc(at)).length > 0;
+  return {
+    syncedVersions,
+    attempts: 0,
+    lastError: null,
+    lastSyncedAt: at,
+    // Si quedan pendientes, el siguiente intento es inmediato.
+    ...(remaining
+      ? { pending: true, pendingSince: current.pendingSince ?? at, nextAttemptAt: at, status: 'pending' }
+      : SYNCED),
+  };
+}
+
+/**
+ * Fallo reintentable del PUT en el instante `at`: un fallo seguido más y el siguiente intento tras
+ * el backoff (un instante, no un timer).
+ */
+export function recordFailure(
+  current: AccommodationDoc,
+  error: PortalError,
+  at: Date,
+  config: BackoffConfig,
+  random: () => number = Math.random,
+): SyncPatch {
+  const attempts = current.attempts + 1;
+  return {
+    attempts,
+    nextAttemptAt: addMs(at, backoffDelayMs(attempts, config, random)),
+    lastError: { code: error.code, message: error.message, at },
+  };
+}
+
+/**
+ * Alojamiento marcado como pendiente sin nada que enviar de hoy en adelante (sus días pendientes
+ * ya han pasado): queda sincronizado. `null` si no hay nada que cambiar.
+ */
+export function settleWithoutPending(current: AccommodationDoc, at: Date): SyncPatch | null {
+  if (!current.pending || groupPendingRanges(current.days, todayUtc(at)).length > 0) return null;
+  return { ...SYNCED, attempts: 0, lastError: null };
+}
+
+const SYNCED = { pending: false, pendingSince: null, nextAttemptAt: null, status: 'synced' } as const satisfies SyncPatch;
 
 function latest(a: Date, b: Date): Date {
   return a.getTime() >= b.getTime() ? a : b;

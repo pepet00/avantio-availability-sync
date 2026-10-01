@@ -1,7 +1,9 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, type Config } from './config.js';
+import { PortalClient } from './portal/client.js';
 import { connectStorage, type Storage } from './storage/mongo.js';
 import { AccommodationRepository } from './storage/repository.js';
+import { SyncWorker } from './sync/worker.js';
 
 // La configuración se carga antes de nada: con un valor inválido, el servicio no arranca.
 // El error va a stderr en texto plano porque el logger depende de esta misma configuración.
@@ -24,7 +26,8 @@ try {
   process.exit(1);
 }
 
-const app = buildApp(config, { repository: new AccommodationRepository(storage.accommodations) });
+const repository = new AccommodationRepository(storage.accommodations);
+const app = buildApp(config, { repository });
 await app.ready();
 
 // Fastify escribe "Server listening at …" sin `event` y sin opción para quitarlo:
@@ -39,3 +42,7 @@ try {
 const address = app.server.address();
 const port = typeof address === 'object' && address !== null ? address.port : config.port;
 app.log.info({ event: 'server.started', port }, 'Servicio escuchando');
+
+const portal = new PortalClient(config, { logger: app.log });
+const worker = new SyncWorker({ repository, portal, logger: app.log, config });
+worker.start();

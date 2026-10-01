@@ -158,7 +158,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T8 — Worker: bucle, lease y confirmación
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: enviar al portal los rangos pendientes de cada alojamiento, reservándolo con un lease, y marcar sincronizados solo los días confirmados con un `200`.
 
@@ -196,6 +196,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 - Al primer fallo el worker se detiene en ese alojamiento: los rangos ya confirmados quedan confirmados y los restantes no se envían en ese ciclo.
 - Con `FAILING_THRESHOLD` fallos seguidos pasa a `failing` y `sync.accommodation.failing` se registra una sola vez; un update nuevo no adelanta el reintento; un `200` posterior lo devuelve a `synced`.
 - Un `401` se reintenta como un `5xx`.
+- Si un update adelanta el reintento mientras un PUT está en camino y ese PUT falla con `5xx`, manda el fallo: `nextAttemptAt` queda con el backoff y el adelanto se pierde.
 
 **CA**: CA-4 (integración), CA-5. Logs: `sync.put.failed`, `sync.accommodation.failing`. El backoff y el margen se guardan como instantes (`nextAttemptAt`), no como timers.
 
