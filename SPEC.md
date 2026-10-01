@@ -32,7 +32,7 @@ Servicio que recibe cambios de disponibilidad y precio de alojamientos por HTTP,
 
 - No se comprueba si el alojamiento existe en el portal: haría depender la aceptación de que el portal esté disponible y gastaría cuota. Si no existe, acabará en `error`.
 - Un día cuyos valores coinciden con los guardados no cambia de versión ni se reenvía: la cuota es escasa.
-- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`); esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`) salvo si ya está en `failing`, para no gastar cuota con el portal caído; tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5).
+- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`) aunque el update no cambie ningún valor, porque es la única forma de pedir un nuevo intento; esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`) salvo si ya está en `failing`, para no gastar cuota con el portal caído; tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5).
 
 Respuesta `202`, solo cuando el cambio está escrito en MongoDB:
 
@@ -180,7 +180,7 @@ Una petición que expira en nuestro lado puede aplicarse igual en el portal y pi
 
 ## Configuración
 
-Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos.
+Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos. Si una variable tiene un valor inválido (por ejemplo, `PORT=abc`), el servicio no arranca y el error nombra la variable.
 
 | Variable | Por defecto | Qué controla |
 |---|---|---|
