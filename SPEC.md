@@ -156,7 +156,7 @@ El ritmo lo marca el limitador, no el bucle. Un `429` a mitad de un alojamiento 
 
 Se recorren los días pendientes de hoy o posteriores en orden y se abre un grupo nuevo si hay un hueco, si cambian los valores o si el grupo ya tiene 31 días. Cada grupo es un `PUT` con el estado actual de esos días. Ejemplo: 90 días iguales desde el 1 de octubre dan 1–31 oct, 1 nov–1 dic y 2–29 dic.
 
-Tras un `200`, `syncedVersion = version` solo en los días cuya versión no cambió mientras el PUT estaba en camino; los demás siguen pendientes. Si llegó un update (subió `seq`) mientras se procesaba un `404` o `400`, no se marca `error`: se programa un intento inmediato con el estado nuevo, y solo si vuelve a fallar sin cambios de por medio pasa a `error`. Así un update nunca queda atascado detrás de un `error` escrito a la vez.
+Tras un `200`, `syncedVersion = version` solo en los días cuya versión no cambió mientras el PUT estaba en camino; los demás siguen pendientes. Si llegó un update (subió `seq`) mientras se procesaba un `404` o `400`, no se marca `error`: se programa un intento inmediato con el estado nuevo, y solo si vuelve a fallar sin cambios de por medio pasa a `error`. Así un update nunca queda atascado detrás de un `error` escrito a la vez. Ese intento inmediato se programa una vez aunque el alojamiento esté en `failing` (sin tocar `attempts` ni `status`): la regla de no adelantar en `failing` es para no gastar cuota con el portal caído (`5xx`), y esta, para no dejar un update atascado tras un `error`.
 
 ### Respuestas del portal
 
@@ -166,7 +166,7 @@ Tras un `200`, `syncedVersion = version` solo en los días cuya versión no camb
 | `5xx` o `401` | +1 | Backoff `min(2 s × 2^(attempts−1), 5 min)` con *full jitter* | `pending` o `failing` (5 o más fallos) |
 | Timeout o error de conexión | +1 | `max(margen de espera, backoff)` | `pending` o `failing` |
 | `429` | Sin cambios | Pausa global hasta `Retry-After` | Sin cambios |
-| `404` o `400` | — | `nextAttemptAt = null` (`400` indica un bug: validamos igual que el portal) | `error` |
+| `404` o `400` | Sin cambios | `nextAttemptAt = null` (`400` indica un bug: validamos igual que el portal) | `error` |
 
 Un `401` solo ocurre con la API key mal configurada; se reintenta como un error más y lo harán visible la alerta de cambios sin sincronizar y los logs. Respuestas no previstas: cualquier `2xx` es éxito; cualquier otro `4xx` se trata como `400` (`outcome=bad_request`); todo lo demás, como `server_error`. Un cuerpo vacío o que no es JSON da `server_error` sea cual sea el código, salvo en un `429`, que siempre activa la pausa: el portal responde siempre JSON, así que un `2xx` sin cuerpo o una página HTML (de un proxy o de una `PORTAL_URL` mal puesta, incluido un `503` o un `404`) no viene de él. No se marca ningún día como sincronizado ni se deja el alojamiento en `error`: se reintenta.
 

@@ -205,7 +205,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T10 — Worker: errores permanentes
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: llevar a `error` los alojamientos que el portal rechaza con `404` o `400`, sin más reintentos hasta un update nuevo y sin dejar un update atascado detrás del `error`.
 

@@ -144,9 +144,18 @@ export function confirmRange(current: AccommodationDoc, sent: Readonly<Record<st
   };
 }
 
+/** Rechazo permanente del portal (`404` o `400` y demás `4xx`): no se reintenta sin un update nuevo. */
+export type PermanentOutcome = 'not_found' | 'bad_request';
+
+export type RetryableOutcome = Exclude<FailureOutcome, PermanentOutcome>;
+
+export function isPermanentOutcome(outcome: FailureOutcome): outcome is PermanentOutcome {
+  return outcome === 'not_found' || outcome === 'bad_request';
+}
+
 /** Fallo reintentable del portal tal como lo devuelve el cliente. */
 export interface RetryableFailure {
-  outcome: FailureOutcome;
+  outcome: RetryableOutcome;
   error: PortalError;
 }
 
@@ -161,7 +170,7 @@ export interface FailurePatch extends SyncPatch {
 }
 
 /** Sin respuesta: la petición puede aplicarse aún en el portal (invariante 5). */
-const GRACE_OUTCOMES = new Set<FailureOutcome>(['timeout', 'connection_error']);
+const GRACE_OUTCOMES = new Set<RetryableOutcome>(['timeout', 'connection_error']);
 
 /**
  * Fallo reintentable del PUT en el instante `at`: un fallo seguido más y el siguiente intento tras
@@ -184,6 +193,28 @@ export function recordFailure(
     status: attempts >= config.failingThreshold ? 'failing' : 'pending',
     lastError: { code: error.code, message: error.message, at },
   };
+}
+
+/** Cambio que escribe un rechazo permanente: `error` o, si llegó un update, un intento inmediato. */
+export type PermanentErrorPatch =
+  | { status: 'error'; nextAttemptAt: null; lastError: LastError }
+  | { nextAttemptAt: Date; lastError: LastError };
+
+/**
+ * `404` o `400` del portal en el instante `at` para un PUT preparado con el documento en `sentSeq`.
+ * Sin updates de por medio, `error`: el worker no lo vuelve a coger hasta que llegue uno. Si llegó
+ * alguno (subió `seq`), el estado nuevo puede ser válido: se reintenta de inmediato, sin tocar
+ * `attempts` ni `status`, y solo pasa a `error` si vuelve a fallar sin cambios.
+ */
+export function recordPermanentError(
+  current: AccommodationDoc,
+  sentSeq: number,
+  error: PortalError,
+  at: Date,
+): PermanentErrorPatch {
+  const lastError = { code: error.code, message: error.message, at };
+  if (current.seq !== sentSeq) return { nextAttemptAt: at, lastError };
+  return { status: 'error', nextAttemptAt: null, lastError };
 }
 
 /**

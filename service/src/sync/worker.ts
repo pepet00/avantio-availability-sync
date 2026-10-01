@@ -7,12 +7,14 @@ import type { FastifyBaseLogger } from 'fastify';
 import { addMs, now } from '../clock.js';
 import type { Config } from '../config.js';
 import { todayUtc } from '../dates.js';
-import type { PortalClient, PortalRange } from '../portal/client.js';
+import type { PortalClient, PortalError, PortalRange } from '../portal/client.js';
 import type { AccommodationRepository } from '../storage/repository.js';
 import { groupPendingRanges } from './grouping.js';
 import {
   confirmRange,
+  isPermanentOutcome,
   recordFailure,
+  recordPermanentError,
   sentVersions,
   settleWithoutPending,
   type RetryableFailure,
@@ -129,8 +131,13 @@ export class SyncWorker {
 
         if (result.outcome !== 'success') {
           // Al primer fallo se detiene: los rangos ya confirmados quedan confirmados.
-          // `404` y `400` también se reintentan hasta que T10 los lleve a `error`.
-          await this.recordFailure(id, range, result, at);
+          const { outcome } = result;
+          if (isPermanentOutcome(outcome)) {
+            await this.recordPermanentError(id, range, current.seq, result, at);
+          } else {
+            // `outcome` ya está estrechado a los reintentables; `result.outcome` no, de ahí el spread.
+            await this.recordFailure(id, range, { ...result, outcome }, at);
+          }
           return true;
         }
 
@@ -193,6 +200,34 @@ export class SyncWorker {
         'Alojamiento con fallos seguidos',
       );
     }
+  }
+
+  private async recordPermanentError(
+    id: string,
+    range: PortalRange,
+    sentSeq: number,
+    failure: { status: number | null; error: PortalError; durationMs: number },
+    at: Date,
+  ): Promise<void> {
+    // Con concurrencia optimista: si un update se escribe a la vez, se recalcula con su `seq` y no
+    // queda atascado detrás de un `error`.
+    const applied = await this.repository.applySyncResult(id, (doc) =>
+      recordPermanentError(doc, sentSeq, failure.error, at),
+    );
+    if (applied === null || !('status' in applied.patch)) return;
+
+    this.logger.error(
+      {
+        event: 'sync.accommodation.error',
+        accommodationId: id,
+        from: range.from,
+        to: range.to,
+        status: failure.status,
+        errorCode: failure.error.code,
+        durationMs: failure.durationMs,
+      },
+      'El portal rechaza el alojamiento; no se reintentará hasta un update nuevo',
+    );
   }
 }
 
