@@ -2,6 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { advanceClock, now, resetClock } from '../../src/clock.js';
 import { addDays, todayUtc } from '../../src/dates.js';
+import { createMetrics } from '../../src/metrics/registry.js';
 import { PortalClient, type PortalClientConfig, type PortalOutcome, type PortalRange } from '../../src/portal/client.js';
 import { captureLogs, type LogCapture } from '../helpers/log-capture.js';
 import {
@@ -37,7 +38,7 @@ interface ClientOptions extends Partial<PortalClientConfig> {
 function createClient({ windowMs, defaultRetryAfterMs, ...config }: ClientOptions = {}): PortalClient {
   return new PortalClient(
     { portalUrl: portal.url, portalApiKey: 'test-key', portalRateLimit: 100, portalTimeoutMs: 2_000, ...config },
-    { logger: logs.logger, windowMs: windowMs ?? 60_000, defaultRetryAfterMs: defaultRetryAfterMs ?? 60_000 },
+    { logger: logs.logger, metrics: createMetrics(), windowMs: windowMs ?? 60_000, defaultRetryAfterMs: defaultRetryAfterMs ?? 60_000 },
   );
 }
 

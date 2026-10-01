@@ -5,6 +5,8 @@ import type { DesiredDay } from '../sync/grouping.js';
 
 export type SyncStatus = 'synced' | 'pending' | 'failing' | 'error';
 
+export const SYNC_STATUSES: readonly SyncStatus[] = ['synced', 'pending', 'failing', 'error'];
+
 /**
  * Último fallo del portal; se borra con el siguiente `200`. `code` es el del portal o, si no hubo
  * respuesta, el del cliente (`TIMEOUT`, `CONNECTION_ERROR`).

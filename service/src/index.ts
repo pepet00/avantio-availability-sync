@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, type Config } from './config.js';
+import { createMetrics } from './metrics/registry.js';
 import { PortalClient } from './portal/client.js';
 import { connectStorage, type Storage } from './storage/mongo.js';
 import { AccommodationRepository } from './storage/repository.js';
@@ -27,7 +28,8 @@ try {
 }
 
 const repository = new AccommodationRepository(storage.accommodations);
-const app = buildApp(config, { repository });
+const metrics = createMetrics();
+const app = buildApp(config, { repository, metrics });
 await app.ready();
 
 // Fastify escribe "Server listening at …" sin `event` y sin opción para quitarlo:
@@ -43,6 +45,6 @@ const address = app.server.address();
 const port = typeof address === 'object' && address !== null ? address.port : config.port;
 app.log.info({ event: 'server.started', port }, 'Servicio escuchando');
 
-const portal = new PortalClient(config, { logger: app.log });
-const worker = new SyncWorker({ repository, portal, logger: app.log, config });
+const portal = new PortalClient(config, { logger: app.log, metrics });
+const worker = new SyncWorker({ repository, portal, logger: app.log, config, metrics });
 worker.start();

@@ -7,6 +7,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { addMs, now } from '../clock.js';
 import type { Config } from '../config.js';
 import { todayUtc } from '../dates.js';
+import { recordRetry, type WorkerMetrics } from '../metrics/registry.js';
 import type { PortalClient, PortalError, PortalRange } from '../portal/client.js';
 import type { AccommodationRepository } from '../storage/repository.js';
 import { groupPendingRanges } from './grouping.js';
@@ -30,6 +31,8 @@ export interface WorkerDeps {
   portal: PortalClient;
   logger: FastifyBaseLogger;
   config: WorkerConfig;
+  /** `sync_retries_total`, una vez por fallo reintentable registrado. */
+  metrics: WorkerMetrics;
   /** Fuente de azar del backoff, como `Math.random`. */
   random?: () => number;
 }
@@ -39,15 +42,17 @@ export class SyncWorker {
   private readonly portal: PortalClient;
   private readonly logger: FastifyBaseLogger;
   private readonly config: WorkerConfig;
+  private readonly metrics: WorkerMetrics;
   private readonly random: () => number;
   private controller = new AbortController();
   private running: Promise<void> | null = null;
 
-  constructor({ repository, portal, logger, config, random = Math.random }: WorkerDeps) {
+  constructor({ repository, portal, logger, config, metrics, random = Math.random }: WorkerDeps) {
     this.repository = repository;
     this.portal = portal;
     this.logger = logger;
     this.config = config;
+    this.metrics = metrics;
     this.random = random;
   }
 
@@ -172,6 +177,7 @@ export class SyncWorker {
     );
     if (applied === null) return;
     const { before, patch } = applied;
+    recordRetry(this.metrics, failure.outcome);
 
     this.logger.warn(
       {

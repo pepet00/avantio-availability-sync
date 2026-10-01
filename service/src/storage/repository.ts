@@ -12,7 +12,7 @@ import {
   type UpdateConfig,
   type UpdatePatch,
 } from '../sync/state.js';
-import type { AccommodationDoc } from './types.js';
+import { SYNC_STATUSES, type AccommodationDoc, type SyncStatus } from './types.js';
 
 const DUPLICATE_KEY = 11000;
 
@@ -28,6 +28,26 @@ export class AccommodationRepository {
 
   findById(accommodationId: string): Promise<AccommodationDoc | null> {
     return this.accommodations.findOne({ _id: accommodationId });
+  }
+
+  /** Alojamientos con cada estado (índice `{ status: 1 }`). */
+  async countByStatus(): Promise<Record<SyncStatus, number>> {
+    const counts = await Promise.all(
+      SYNC_STATUSES.map(async (status) => [status, await this.accommodations.countDocuments({ status })] as const),
+    );
+    return Object.fromEntries(counts) as Record<SyncStatus, number>;
+  }
+
+  /**
+   * El `pendingSince` más viejo entre los alojamientos `pending` y `failing` (índice
+   * `{ pending: 1, pendingSince: 1 }`). Excluye `error`, que tiene su propia alerta. `null` si no hay.
+   */
+  async oldestPendingSince(): Promise<Date | null> {
+    const oldest = await this.accommodations.findOne(
+      { pending: true, pendingSince: { $ne: null }, status: { $in: ['pending', 'failing'] } },
+      { sort: { pendingSince: 1 }, projection: { pendingSince: 1 } },
+    );
+    return oldest?.pendingSince ?? null;
   }
 
   /**

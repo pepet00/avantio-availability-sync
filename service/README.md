@@ -70,3 +70,7 @@ npm run test:e2e    # E2E contra el Portal Sol real. Requiere el docker-compose 
 ## Estructura
 
 *Pendiente: describir las carpetas principales de `service/src` cuando estén creadas.*
+
+## Mejoras futuras
+
+- **Sustituir `prom-client`**: la versión 15.1.3 está marcada en npm como deprecada en favor de `@prometheus-io/client`. Funciona y se mantiene por ahora; el cambio queda dentro de `src/metrics/`.

@@ -6,6 +6,7 @@ import type { FastifyBaseLogger } from 'fastify';
 import { now } from '../clock.js';
 import type { Config } from '../config.js';
 import { compareDays, daysInRange, parseDay, parseHttpDate } from '../dates.js';
+import { recordPortalRequest, type PortalMetrics } from '../metrics/registry.js';
 import { MAX_RANGE_DAYS } from '../sync/grouping.js';
 import { RateLimiter } from './limiter.js';
 
@@ -44,6 +45,8 @@ export type PortalClientConfig = Pick<Config, 'portalUrl' | 'portalApiKey' | 'po
 
 export interface PortalClientOptions {
   logger: FastifyBaseLogger;
+  /** `portal_requests_total` y `portal_request_duration_seconds`, una vez por petición enviada. */
+  metrics: PortalMetrics;
   /** Longitud de la ventana del limitador. Parámetro interno, no variable de entorno: los tests la acortan. */
   windowMs?: number;
   /** Pausa tras un `429` sin `Retry-After` válido. Parámetro interno, como la ventana. */
@@ -64,6 +67,7 @@ export class PortalClient {
   private readonly timeoutMs: number;
   private readonly defaultRetryAfterMs: number;
   private readonly logger: FastifyBaseLogger;
+  private readonly metrics: PortalMetrics;
   private readonly limiter: RateLimiter;
 
   constructor(config: PortalClientConfig, options: PortalClientOptions) {
@@ -72,6 +76,7 @@ export class PortalClient {
     this.timeoutMs = config.portalTimeoutMs;
     this.defaultRetryAfterMs = options.defaultRetryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
     this.logger = options.logger;
+    this.metrics = options.metrics;
     this.limiter = new RateLimiter({
       limit: config.portalRateLimit,
       windowMs: options.windowMs ?? DEFAULT_WINDOW_MS,
@@ -102,7 +107,13 @@ export class PortalClient {
   async put(accommodationId: string, range: PortalRange, options: PutOptions = {}): Promise<PutResult> {
     assertSendableRange(range);
     await this.limiter.acquire(options.signal);
+    const result = await this.send(accommodationId, range);
+    recordPortalRequest(this.metrics, 'PUT', result.outcome, result.durationMs);
+    return result;
+  }
 
+  /** Envía el PUT ya con paso del limitador y clasifica el resultado. */
+  private async send(accommodationId: string, range: PortalRange): Promise<PutResult> {
     const url = `${this.baseUrl}/api/v1/accommodations/${encodeURIComponent(accommodationId)}/availability`;
     const body: PortalRange = {
       from: range.from,

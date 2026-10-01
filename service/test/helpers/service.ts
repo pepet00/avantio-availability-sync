@@ -4,6 +4,7 @@
 
 import { buildApp } from '../../src/app.js';
 import { loadConfig, type Config } from '../../src/config.js';
+import { createMetrics } from '../../src/metrics/registry.js';
 import { PortalClient } from '../../src/portal/client.js';
 import { connectStorage, type Storage } from '../../src/storage/mongo.js';
 import { AccommodationRepository } from '../../src/storage/repository.js';
@@ -43,7 +44,8 @@ export async function startService(
   const storage = await connectStorage(config.mongoUrl);
   const logs = captureLogs();
   const repository = new AccommodationRepository(storage.accommodations);
-  const app = buildApp(config, { repository, logger: logs.logger });
+  const metrics = createMetrics();
+  const app = buildApp(config, { repository, metrics, logger: logs.logger });
   try {
     await app.listen({ host: '127.0.0.1', port: config.port });
   } catch (error) {
@@ -53,8 +55,15 @@ export async function startService(
   const address = app.server.address();
   if (typeof address !== 'object' || address === null) throw new Error('El servicio no escucha en un puerto TCP');
 
-  const portal = new PortalClient(config, { logger: logs.logger });
-  const worker = new SyncWorker({ repository, portal, logger: logs.logger, config, ...(random && { random }) });
+  const portal = new PortalClient(config, { logger: logs.logger, metrics });
+  const worker = new SyncWorker({
+    repository,
+    portal,
+    logger: logs.logger,
+    config,
+    metrics,
+    ...(random && { random }),
+  });
   if (withWorker) worker.start();
 
   return {

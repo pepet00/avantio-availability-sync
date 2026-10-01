@@ -231,6 +231,8 @@ JSON por salida estándar con `pino`, nivel configurable. Cada línea lleva `eve
 | `worker.started` / `worker.stopped` | info | Arranque y parada del worker |
 | `server.started` | info | Servidor HTTP escuchando, con el puerto |
 | `http.request` | info | Una por petición al servicio (desde un hook `onResponse`), con `reqId`, método, ruta, código y `durationMs`. Los logs de petición propios de Fastify se desactivan |
+| `http.storage_unavailable` | error | MongoDB no disponible al atender una petición (`503 STORAGE_UNAVAILABLE`), con el error |
+| `http.internal_error` | error | Fallo inesperado al atender una petición (`500 INTERNAL_ERROR`), con el error; la respuesta no lleva detalles internos |
 
 ### Métricas
 
@@ -242,7 +244,7 @@ JSON por salida estándar con `pino`, nivel configurable. Cada línea lleva `eve
 | `sync_oldest_pending_age_seconds` | gauge | Trabajo pendiente: antigüedad del `pendingSince` más viejo entre `pending` y `failing` (0 si no hay). Excluye `error`, que tiene su propia alerta; si no, un id inexistente dejaría la crítica encendida hasta un año |
 | `portal_requests_total{method, outcome}` | counter | Resultado de las llamadas al portal |
 | `portal_request_duration_seconds{method, outcome}` | histogram | Latencia (buckets hasta 15 s) |
-| `sync_retries_total{reason}` | counter | Reintentos: `unavailable`, `server_error`, `timeout`, `connection_error`, `unauthorized` |
+| `sync_retries_total{reason}` | counter | Reintentos programados por un fallo reintentable, uno por fallo: `unavailable`, `server_error`, `timeout`, `connection_error`, `unauthorized`. No cuentan la espera por `429` ni el intento inmediato tras un `404`/`400` con un update nuevo de por medio |
 
 `outcome`: `success`, `rate_limited`, `unavailable`, `server_error`, `timeout`, `connection_error`, `not_found`, `bad_request`, `unauthorized`.
 

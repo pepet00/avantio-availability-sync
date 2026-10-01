@@ -224,7 +224,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T11 — Métricas
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: exponer `GET /metrics` en formato Prometheus con las cinco métricas de la SPEC y las del proceso Node.
 

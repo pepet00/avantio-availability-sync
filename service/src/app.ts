@@ -1,17 +1,20 @@
 import { fastify, LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import type { Config } from './config.js';
 import { handleFrameworkError, logHttpRequest, registerErrorHandlers } from './errors.js';
+import type { Metrics } from './metrics/registry.js';
+import { registerMetricsRoute } from './metrics/route.js';
 import type { AccommodationRepository } from './storage/repository.js';
 import { registerStatusRoute } from './status/route.js';
 import { registerUpdatesRoute } from './updates/route.js';
 
 export interface AppDeps {
   repository: AccommodationRepository;
+  metrics: Metrics;
   /** Solo para tests: logger que escribe en memoria. Por defecto, `pino` a `LOG_LEVEL`. */
   logger?: FastifyBaseLogger;
 }
 
-export function buildApp(config: Config, { repository, logger }: AppDeps): FastifyInstance {
+export function buildApp(config: Config, { repository, metrics, logger }: AppDeps): FastifyInstance {
   // Los logs de petición de Fastify no llevan `event`: se sustituyen por http.request.
   const options = {
     logController: new LogController({ disableRequestLogging: true }),
@@ -30,6 +33,7 @@ export function buildApp(config: Config, { repository, logger }: AppDeps): Fasti
   registerErrorHandlers(app);
   registerUpdatesRoute(app, { repository, config });
   registerStatusRoute(app, { repository });
+  registerMetricsRoute(app, { repository, metrics });
 
   return app;
 }
