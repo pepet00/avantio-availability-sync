@@ -11,7 +11,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T1 — Esqueleto del proyecto
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: dejar `service/` con herramientas, comandos, configuración y reloj, y un servidor Fastify vacío que arranca con `npm run dev`.
 

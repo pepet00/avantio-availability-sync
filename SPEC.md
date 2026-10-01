@@ -180,7 +180,7 @@ Una petición que expira en nuestro lado puede aplicarse igual en el portal y pi
 
 ## Configuración
 
-Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos. Si una variable tiene un valor inválido (por ejemplo, `PORT=abc`), el servicio no arranca y el error nombra la variable.
+Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos. Si una variable tiene un valor inválido (por ejemplo, `PORT=abc`), el servicio no arranca y el error nombra la variable; se escribe en texto plano por `stderr`, porque el logger no existe antes de leer la configuración.
 
 | Variable | Por defecto | Qué controla |
 |---|---|---|
@@ -227,6 +227,8 @@ JSON por salida estándar con `pino`, nivel configurable. Cada línea lleva `eve
 | `sync.accommodation.error` | error | Error permanente (`404` o `400`) |
 | `worker.lease_expired` | warn | Se retoma un alojamiento cuyo lease caducó con el proceso vivo (tardó más de 2 min) |
 | `worker.started` / `worker.stopped` | info | Arranque y parada del worker |
+| `server.started` | info | Servidor HTTP escuchando, con el puerto |
+| `http.request` | info | Una por petición al servicio (desde un hook `onResponse`), con `reqId`, método, ruta, código y `durationMs`. Los logs de petición propios de Fastify se desactivan |
 
 ### Métricas
 
