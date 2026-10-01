@@ -38,14 +38,26 @@ export class RateLimiter {
    */
   async acquire(signal?: AbortSignal): Promise<void> {
     for (;;) {
-      signal?.throwIfAborted();
+      await this.ready(signal);
+      // Comprobar y anotar ocurre sin ceder el control: dos llamadas no pueden colarse a la vez.
+      // Si otra se adelantó tras `ready`, se vuelve a esperar.
       const t = performance.now();
-      const wait = this.waitMs(t);
-      if (wait <= 0) {
-        // Comprobar y anotar ocurre sin ceder el control: dos llamadas no pueden colarse a la vez.
+      if (this.waitMs(t) <= 0) {
         this.sent.push(t);
         return;
       }
+    }
+  }
+
+  /**
+   * Espera, sin anotar nada, hasta que la ventana y la pausa permitan enviar.
+   * Si `signal` se aborta durante la espera, rechaza.
+   */
+  async ready(signal?: AbortSignal): Promise<void> {
+    for (;;) {
+      signal?.throwIfAborted();
+      const wait = this.waitMs(performance.now());
+      if (wait <= 0) return;
       // Al despertar se vuelve a comprobar: otra llamada pudo ocupar el hueco o alargar la pausa.
       await delay(Math.min(Math.ceil(wait), MAX_TIMER_MS), undefined, { signal });
     }

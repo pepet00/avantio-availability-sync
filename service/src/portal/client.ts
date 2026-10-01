@@ -79,6 +79,15 @@ export class PortalClient {
   }
 
   /**
+   * Espera, sin enviar ni ocupar hueco en la ventana, a que el limitador y la pausa por `429`
+   * permitan enviar. Sirve para preparar la petición después de la espera: si nadie más envía
+   * entre medias, el `put` siguiente sale sin esperar. Si `signal` se aborta, rechaza.
+   */
+  waitForTurn(signal?: AbortSignal): Promise<void> {
+    return this.limiter.ready(signal);
+  }
+
+  /**
    * Envía un rango al portal. Espera antes lo que digan el limitador y la pausa; si `signal`
    * se aborta mientras tanto, rechaza sin enviar nada. Ante un `429` no reintenta: activa la
    * pausa y devuelve `rate_limited`, para que quien llama reenvíe el estado vigente.

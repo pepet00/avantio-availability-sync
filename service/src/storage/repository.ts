@@ -98,23 +98,24 @@ export class AccommodationRepository {
   /**
    * Escribe el resultado del worker. `compute` calcula el cambio sobre el documento leído
    * (`null` si no hay nada que escribir) y se vuelve a llamar con el estado nuevo si otra
-   * escritura se adelanta.
+   * escritura se adelanta. Devuelve el documento sobre el que se aplicó y el cambio escrito;
+   * `null` si no se escribió nada.
    */
-  async applySyncResult(
+  async applySyncResult<P extends SyncPatch>(
     accommodationId: string,
-    compute: (current: AccommodationDoc) => SyncPatch | null,
-  ): Promise<void> {
+    compute: (current: AccommodationDoc) => P | null,
+  ): Promise<{ before: AccommodationDoc; patch: P } | null> {
     for (;;) {
       const current = await this.findById(accommodationId);
-      if (current === null) return;
+      if (current === null) return null;
       const patch = compute(current);
-      if (patch === null) return;
+      if (patch === null) return null;
 
       const result = await this.accommodations.updateOne(
         { _id: current._id, rev: current.rev },
         { $set: syncFields(patch, current.rev + 1) },
       );
-      if (result.matchedCount === 1) return;
+      if (result.matchedCount === 1) return { before: current, patch };
     }
   }
 }

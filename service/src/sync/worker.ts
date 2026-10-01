@@ -7,12 +7,21 @@ import type { FastifyBaseLogger } from 'fastify';
 import { addMs, now } from '../clock.js';
 import type { Config } from '../config.js';
 import { todayUtc } from '../dates.js';
-import type { PortalClient, PortalError } from '../portal/client.js';
+import type { PortalClient, PortalRange } from '../portal/client.js';
 import type { AccommodationRepository } from '../storage/repository.js';
 import { groupPendingRanges } from './grouping.js';
-import { confirmRange, recordFailure, sentVersions, settleWithoutPending } from './state.js';
+import {
+  confirmRange,
+  recordFailure,
+  sentVersions,
+  settleWithoutPending,
+  type RetryableFailure,
+} from './state.js';
 
-export type WorkerConfig = Pick<Config, 'leaseMs' | 'workerIdleMs' | 'backoffBaseMs' | 'backoffMaxMs'>;
+export type WorkerConfig = Pick<
+  Config,
+  'leaseMs' | 'workerIdleMs' | 'backoffBaseMs' | 'backoffMaxMs' | 'timeoutGraceMs' | 'failingThreshold'
+>;
 
 export interface WorkerDeps {
   repository: AccommodationRepository;
@@ -94,8 +103,10 @@ export class SyncWorker {
     let lease = reservation.doc.leaseUntil;
     try {
       for (;;) {
-        // Antes de cada PUT se renueva el lease y se relee el documento: siempre se envía el
-        // estado deseado actual (invariante 3).
+        // Antes de cada PUT se espera turno (limitador y pausa por `429`) y solo después se renueva
+        // el lease y se relee el documento: el lease cubre el PUT aunque la espera haya sido larga,
+        // y se envía el estado deseado al salir la petición, no el de antes de esperar (invariante 3).
+        await this.portal.waitForTurn(signal);
         const renewedAt = now();
         const renewed = addMs(renewedAt, this.config.leaseMs);
         const current = await this.repository.renewLease(id, lease, renewed);
@@ -112,19 +123,18 @@ export class SyncWorker {
         const result = await this.portal.put(id, range, { signal });
         const at = now();
 
+        // La pausa por `429` es global: se espera manteniendo el lease (la siguiente vuelta empieza
+        // esperando turno) y se reenvía el estado vigente. Ni `attempts` ni el estado cambian.
+        if (result.outcome === 'rate_limited') continue;
+
         if (result.outcome !== 'success') {
           // Al primer fallo se detiene: los rangos ya confirmados quedan confirmados.
-          const error: PortalError =
-            result.outcome === 'rate_limited'
-              ? { code: 'RATE_LIMITED', message: `El portal pide esperar ${String(result.retryAfterMs / 1000)} s` }
-              : result.error;
-          await this.repository.applySyncResult(id, (doc) =>
-            recordFailure(doc, error, at, this.config, this.random),
-          );
+          // `404` y `400` también se reintentan hasta que T10 los lleve a `error`.
+          await this.recordFailure(id, range, result, at);
           return true;
         }
 
-        await this.repository.applySyncResult(id, (doc) => confirmRange(doc, sent, at));
+        const confirmed = await this.repository.applySyncResult(id, (doc) => confirmRange(doc, sent, at));
         this.logger.info(
           {
             event: 'sync.put.succeeded',
@@ -136,9 +146,52 @@ export class SyncWorker {
           },
           'Rango sincronizado',
         );
+        // Sin pendientes no hace falta esperar otro turno para comprobarlo.
+        if (confirmed?.patch.pending === false) return true;
       }
     } finally {
       await this.repository.releaseLease(id, lease);
+    }
+  }
+
+  private async recordFailure(
+    id: string,
+    range: PortalRange,
+    failure: RetryableFailure & { status: number | null; durationMs: number },
+    at: Date,
+  ): Promise<void> {
+    const applied = await this.repository.applySyncResult(id, (doc) =>
+      recordFailure(doc, failure, at, this.config, this.random),
+    );
+    if (applied === null) return;
+    const { before, patch } = applied;
+
+    this.logger.warn(
+      {
+        event: 'sync.put.failed',
+        accommodationId: id,
+        from: range.from,
+        to: range.to,
+        attempt: patch.attempts,
+        status: failure.status,
+        errorCode: failure.error.code,
+        durationMs: failure.durationMs,
+        nextAttemptAt: patch.nextAttemptAt.toISOString(),
+      },
+      'PUT fallido; se reintentará',
+    );
+    // Una vez al cruzar el umbral, no en cada intento: `attempts` solo vuelve a 0 con un `200`.
+    if (before.status !== 'failing' && patch.status === 'failing') {
+      this.logger.error(
+        {
+          event: 'sync.accommodation.failing',
+          accommodationId: id,
+          attempt: patch.attempts,
+          errorCode: failure.error.code,
+          nextAttemptAt: patch.nextAttemptAt.toISOString(),
+        },
+        'Alojamiento con fallos seguidos',
+      );
     }
   }
 }

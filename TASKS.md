@@ -181,7 +181,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T9 — Worker: reintentos, timeouts y `429`
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: tratar los fallos transitorios del portal según la tabla *Respuestas del portal*: backoff, estado `failing`, margen tras timeout y espera por `429` manteniendo el lease.
 
@@ -191,6 +191,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 **Tests** (integración):
 - **CA-4**: tras un `429` con `Retry-After`, el portal falso no recibe ninguna petición antes de que pase; después la sincronización termina y `attempts` no ha cambiado.
+- Un update que llega durante la pausa por `429` sale en el primer PUT tras ella: el worker espera turno antes de renovar el lease y releer el documento.
 - **CA-5**: el portal falso no responde a un PUT; no llega nada de ese alojamiento antes del margen, aunque entre un update nuevo en medio; otro alojamiento sí se envía mientras tanto; pasado el margen se reenvía el estado actual.
 - Un `503` seguido de un `200`: `attempts` pasa a 1 con `lastError` y `nextAttemptAt` visibles en `sync-status`, y vuelve a 0 con `lastError: null`.
 - Al primer fallo el worker se detiene en ese alojamiento: los rangos ya confirmados quedan confirmados y los restantes no se envían en ese ciclo.

@@ -4,7 +4,7 @@
 import { addMs } from '../clock.js';
 import type { Config } from '../config.js';
 import { enumerateDays, todayUtc, type Day } from '../dates.js';
-import type { PortalError } from '../portal/client.js';
+import type { FailureOutcome, PortalError } from '../portal/client.js';
 import type { AccommodationDoc, LastError, SyncStatus } from '../storage/types.js';
 import { backoffDelayMs, type BackoffConfig } from './backoff.js';
 import { groupPendingRanges, type DesiredDay, type PendingRange } from './grouping.js';
@@ -144,21 +144,44 @@ export function confirmRange(current: AccommodationDoc, sent: Readonly<Record<st
   };
 }
 
+/** Fallo reintentable del portal tal como lo devuelve el cliente. */
+export interface RetryableFailure {
+  outcome: FailureOutcome;
+  error: PortalError;
+}
+
+export type RetryConfig = BackoffConfig & Pick<Config, 'timeoutGraceMs' | 'failingThreshold'>;
+
+/** Cambio que escribe un fallo reintentable: siempre fija estos campos. */
+export interface FailurePatch extends SyncPatch {
+  attempts: number;
+  nextAttemptAt: Date;
+  status: 'pending' | 'failing';
+  lastError: LastError;
+}
+
+/** Sin respuesta: la petición puede aplicarse aún en el portal (invariante 5). */
+const GRACE_OUTCOMES = new Set<FailureOutcome>(['timeout', 'connection_error']);
+
 /**
  * Fallo reintentable del PUT en el instante `at`: un fallo seguido más y el siguiente intento tras
- * el backoff (un instante, no un timer).
+ * el backoff (un instante, no un timer). Tras un timeout o error de conexión, nunca antes del margen.
+ * Con `failingThreshold` fallos seguidos o más, `failing`.
  */
 export function recordFailure(
   current: AccommodationDoc,
-  error: PortalError,
+  { outcome, error }: RetryableFailure,
   at: Date,
-  config: BackoffConfig,
+  config: RetryConfig,
   random: () => number = Math.random,
-): SyncPatch {
+): FailurePatch {
   const attempts = current.attempts + 1;
+  const backoff = backoffDelayMs(attempts, config, random);
+  const delay = GRACE_OUTCOMES.has(outcome) ? Math.max(config.timeoutGraceMs, backoff) : backoff;
   return {
     attempts,
-    nextAttemptAt: addMs(at, backoffDelayMs(attempts, config, random)),
+    nextAttemptAt: addMs(at, delay),
+    status: attempts >= config.failingThreshold ? 'failing' : 'pending',
     lastError: { code: error.code, message: error.message, at },
   };
 }

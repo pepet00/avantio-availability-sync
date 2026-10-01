@@ -21,6 +21,8 @@ export interface TestService {
 export interface ServiceOptions {
   /** Arranca el worker, que envía al portal de `portalUrl`. Sin él, solo la API. */
   worker?: boolean;
+  /** Fuente de azar del backoff; fija, para que `nextAttemptAt` sea predecible. */
+  random?: () => number;
 }
 
 /** Tiempos muy cortos para que los tests no esperen; cada test puede cambiarlos. */
@@ -35,7 +37,7 @@ const TEST_TIMINGS: Partial<Config> = {
 export async function startService(
   mongoUrl: string,
   overrides: Partial<Config> = {},
-  { worker: withWorker = false }: ServiceOptions = {},
+  { worker: withWorker = false, random }: ServiceOptions = {},
 ): Promise<TestService> {
   const config: Config = { ...loadConfig({}), ...TEST_TIMINGS, mongoUrl, port: 0, ...overrides };
   const storage = await connectStorage(config.mongoUrl);
@@ -52,7 +54,7 @@ export async function startService(
   if (typeof address !== 'object' || address === null) throw new Error('El servicio no escucha en un puerto TCP');
 
   const portal = new PortalClient(config, { logger: logs.logger });
-  const worker = new SyncWorker({ repository, portal, logger: logs.logger, config });
+  const worker = new SyncWorker({ repository, portal, logger: logs.logger, config, ...(random && { random }) });
   if (withWorker) worker.start();
 
   return {
