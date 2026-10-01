@@ -92,7 +92,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T5 — Persistencia y aplicación de un update
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: guardar en `accommodations_sync` el estado deseado por día, aplicando cada update con concurrencia optimista por `rev`.
 

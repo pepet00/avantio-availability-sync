@@ -7,6 +7,11 @@ export function now(): Date {
   return new Date(Date.now() + offsetMs);
 }
 
+/** Instante desplazado `ms` milisegundos (por ejemplo, `nextAttemptAt = now() + margen`). */
+export function addMs(instant: Date, ms: number): Date {
+  return new Date(instant.getTime() + ms);
+}
+
 /** Solo para tests: adelanta el reloj sin congelarlo; sigue avanzando con la hora real. */
 export function advanceClock(ms: number): void {
   if (!Number.isFinite(ms) || ms < 0) {
