@@ -30,7 +30,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T2 — Módulo de fechas
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: reunir en un módulo puro toda la validación y aritmética de días de calendario en UTC.
 
