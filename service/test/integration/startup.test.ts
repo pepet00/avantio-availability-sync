@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { startTestMongo, type TestMongo } from '../helpers/mongo.js';
 
 const serviceDir = fileURLToPath(new URL('../..', import.meta.url));
 const entry = ['--import', 'tsx', 'src/index.ts'];
@@ -21,6 +22,16 @@ function logLines(output: string): LogLine[] {
 }
 
 describe('arranque', () => {
+  let mongo: TestMongo;
+
+  beforeAll(async () => {
+    mongo = await startTestMongo();
+  }, 120_000);
+
+  afterAll(async () => {
+    await mongo.stop();
+  });
+
   it('con un valor de entorno inválido no arranca y el error nombra la variable', () => {
     // Si llegara a escuchar, no terminaría solo: el timeout lo mata y el test falla.
     const result = spawnSync(process.execPath, entry, {
@@ -38,7 +49,7 @@ describe('arranque', () => {
   it('con configuración válida escucha, registra server.started y cada petición con http.request', async () => {
     const child = spawn(process.execPath, entry, {
       cwd: serviceDir,
-      env: { ...process.env, PORT: '0', LOG_LEVEL: 'info' },
+      env: { ...process.env, PORT: '0', LOG_LEVEL: 'info', MONGO_URL: mongo.freshUrl() },
     });
     let stdout = '';
     let stderr = '';

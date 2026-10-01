@@ -1,5 +1,7 @@
 import { buildApp } from './app.js';
 import { ConfigError, loadConfig, type Config } from './config.js';
+import { connectStorage, type Storage } from './storage/mongo.js';
+import { AccommodationRepository } from './storage/repository.js';
 
 // La configuración se carga antes de nada: con un valor inválido, el servicio no arranca.
 // El error va a stderr en texto plano porque el logger depende de esta misma configuración.
@@ -12,7 +14,17 @@ try {
   process.exit(1);
 }
 
-const app = buildApp(config);
+// Sin MongoDB el servicio no arranca. Como con la configuración, el error va a stderr en texto plano.
+let storage: Storage;
+try {
+  storage = await connectStorage(config.mongoUrl);
+} catch (error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`No se puede conectar a MongoDB (MONGO_URL): ${detail}\n`);
+  process.exit(1);
+}
+
+const app = buildApp(config, { repository: new AccommodationRepository(storage.accommodations) });
 await app.ready();
 
 // Fastify escribe "Server listening at …" sin `event` y sin opción para quitarlo:

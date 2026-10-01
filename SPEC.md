@@ -78,8 +78,8 @@ Misma forma que el portal, `{ "error": { "code": "...", "message": "..." } }`, c
 
 | Caso | Respuesta |
 |---|---|
-| JSON mal formado o sin `Content-Type: application/json` | `400 INVALID_BODY` (traduciendo los errores de parseo de Fastify) |
-| Ruta inexistente | `404 NOT_FOUND` |
+| JSON mal formado, sin `Content-Type: application/json` o de más de 1 MB | `400 INVALID_BODY` (traduciendo los errores de parseo de Fastify) |
+| Ruta inexistente o URL mal codificada (por ejemplo, `/%zz`) | `404 NOT_FOUND` |
 | MongoDB no disponible (en `POST`, `sync-status` o `/metrics`) | `503 STORAGE_UNAVAILABLE`; en el `POST`, sin `202` (invariante 1) |
 | Cualquier otro fallo | `500 INTERNAL_ERROR`, sin detalles internos |
 
@@ -180,7 +180,7 @@ Una petición que expira en nuestro lado puede aplicarse igual en el portal y pi
 
 ## Configuración
 
-Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos. Si una variable tiene un valor inválido (por ejemplo, `PORT=abc`), el servicio no arranca y el error nombra la variable; se escribe en texto plano por `stderr`, porque el logger no existe antes de leer la configuración.
+Variables de entorno. Los valores por defecto sirven para el `docker-compose` local; los tests usan tiempos mucho más cortos. Si una variable tiene un valor inválido (por ejemplo, `PORT=abc`), el servicio no arranca y el error nombra la variable; se escribe en texto plano por `stderr`, porque el logger no existe antes de leer la configuración. Lo mismo si MongoDB no está disponible al arrancar: el servicio no arranca y lo dice por `stderr`, en texto plano.
 
 | Variable | Por defecto | Qué controla |
 |---|---|---|

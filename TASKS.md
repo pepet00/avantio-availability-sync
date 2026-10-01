@@ -115,7 +115,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T6 — `POST /updates` y errores del servicio
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: aceptar updates por HTTP con todas las reglas de validación de la SPEC y responder `202` solo cuando el cambio está escrito en MongoDB.
 
