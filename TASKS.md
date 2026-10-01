@@ -287,7 +287,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T14 — E2E contra Portal Sol y cierre
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: comprobar el servicio completo contra el Portal Sol real, provocando `429`, y dejar la documentación de `service/` al día.
 

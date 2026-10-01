@@ -67,9 +67,31 @@ npm run test:e2e    # E2E contra el Portal Sol real. Requiere el docker-compose 
 
 `npm test` arranca un MongoDB temporal con `mongodb-memory-server`. La primera ejecución descarga el binario de MongoDB, así que necesita conexión a internet y tarda más.
 
+`npm run test:e2e` arranca el servicio dentro del propio test contra el Portal Sol y el MongoDB del `docker-compose`. Al empezar llama a `POST /__admin/reset` del portal y borra la base `sync-e2e` (no toca la base `sync` de `npm run dev`). El limitador se pone por encima del límite del portal para forzar algún `429`, así que tarda unos minutos. Como el portal falla y tarda al azar, la duración cambia de una ejecución a otra.
+
 ## Estructura
 
-*Pendiente: describir las carpetas principales de `service/src` cuando estén creadas.*
+```
+src/
+  index.ts         Arranque: configuración, MongoDB, reset de leases, barrido, HTTP y worker
+  lifecycle.ts     Parada ordenada (SIGTERM/SIGINT) con tiempo máximo
+  app.ts           Fastify: rutas, manejador de errores y log http.request
+  config.ts        Variables de entorno de la SPEC, validadas
+  clock.ts         now(): único origen de instantes; desplazable en tests
+  dates.ts         Días de calendario YYYY-MM-DD en UTC (validación y aritmética)
+  errors.ts        Errores con la forma { error: { code, message } }
+  updates/         POST /updates: validación (pura) y ruta
+  status/          GET /accommodations/:id/sync-status
+  metrics/         Registro de métricas Prometheus y GET /metrics
+  storage/         Conexión e índices de MongoDB, tipo del documento y repositorio (concurrencia por rev, lease)
+  portal/          Cliente único del portal (timeout, clasificación de respuestas) y limitador (ventana deslizante, pausa por 429)
+  sync/            Worker, barrido de días pasados y funciones puras: transiciones de estado, agrupación en rangos y backoff
+test/
+  unit/            Funciones puras, sin MongoDB ni red
+  integration/     Servicio completo contra MongoDB en memoria y el portal falso
+  e2e/             Contra el Portal Sol real (npm run test:e2e)
+  helpers/         Portal falso, MongoDB en memoria, arranque del servicio, captura de logs y espera por condición
+```
 
 ## Mejoras futuras
 

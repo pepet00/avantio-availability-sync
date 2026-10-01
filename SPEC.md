@@ -270,7 +270,7 @@ La única alerta crítica es la que indica que los gestores están afectados; la
 | CA-1 | Con dos updates solapados sobre el mismo alojamiento, el portal acaba con los valores del último. | Integración, E2E |
 | CA-2 | Si llega un update mientras un PUT de esos días está en camino, el día no se marca sincronizado y se reenvía con el valor nuevo. | Integración |
 | CA-3 | Un update de 90 días genera exactamente tres PUT, ninguno de más de 31 días. | Unitario, E2E |
-| CA-4 | Tras un `429`, no llega ninguna petición al portal antes del `Retry-After`. | Integración, E2E |
+| CA-4 | Tras un `429`, no llega ninguna petición del servicio al portal antes del `Retry-After`. Las del propio test E2E gastan del mismo contador y pueden caer dentro de una pausa. | Integración, E2E |
 | CA-5 | Tras un timeout, nada de ese alojamiento se envía antes del margen; después se reenvía el estado actual. | Integración |
 | CA-6 | Tras un reinicio con updates pendientes, todos se sincronizan. | Integración |
 | CA-7 | `2026-02-30` se rechaza con `400 INVALID_DATE`, cada regla del POST devuelve su código, y ningún rango enviado repite ni salta días. | Unitario, integración |
@@ -293,4 +293,4 @@ Con `vitest`, en tres niveles.
 2. Ráfaga de updates solapados sobre varios alojamientos, incluido uno de más de 31 días.
 3. Esperar a que todos estén en `synced`.
 4. Comprobar con `GET /api/v1/accommodations/:id` que el portal tiene el estado esperado (CA-1, CA-3).
-5. Revisar `/__admin/requests`: ningún PUT de más de 31 días ni peticiones dentro de un `Retry-After` (CA-3, CA-4).
+5. Revisar `/__admin/requests`: ningún PUT de más de 31 días ni peticiones del servicio dentro de un `Retry-After` (CA-3, CA-4).
