@@ -49,15 +49,15 @@ Para que quien esté de guardia, o el gestor, sepa si los cambios han llegado al
   "accommodationId": "acc-1003",
   "status": "pending",
   "pendingDays": 2,
-  "pendingSince": "2026-10-01T10:15:00Z",
+  "pendingSince": "2026-10-01T10:15:00.000Z",
   "pendingRanges": [
     { "from": "2026-10-03", "to": "2026-10-03", "available": true,  "pricePerNight": 150 },
     { "from": "2026-10-04", "to": "2026-10-04", "available": false, "pricePerNight": 120 }
   ],
   "attempts": 1,
-  "nextAttemptAt": "2026-10-01T10:16:30Z",
-  "lastError": { "code": "TIMEOUT", "message": "Sin respuesta tras 15 s", "at": "2026-10-01T10:15:30Z" },
-  "lastSyncedAt": "2026-10-01T10:14:02Z"
+  "nextAttemptAt": "2026-10-01T10:16:30.000Z",
+  "lastError": { "code": "TIMEOUT", "message": "Sin respuesta tras 15 s", "at": "2026-10-01T10:15:30.000Z" },
+  "lastSyncedAt": "2026-10-01T10:14:02.000Z"
 }
 ```
 
@@ -100,13 +100,13 @@ Una única colección, `accommodations_sync`, un documento por alojamiento. Es l
     "2026-10-04": { "available": false, "price": 120, "version": 2, "syncedVersion": 1 }
   },
   "pending": true,
-  "pendingSince": "2026-10-01T10:15:00Z",
-  "nextAttemptAt": "2026-10-01T10:16:30Z",
+  "pendingSince": "2026-10-01T10:15:00.000Z",
+  "nextAttemptAt": "2026-10-01T10:16:30.000Z",
   "attempts": 1,
   "leaseUntil": null,
   "status": "pending",
-  "lastError": { "code": "TIMEOUT", "message": "…", "at": "2026-10-01T10:15:30Z" },
-  "lastSyncedAt": "2026-10-01T10:14:02Z"
+  "lastError": { "code": "TIMEOUT", "message": "…", "at": "2026-10-01T10:15:30.000Z" },
+  "lastSyncedAt": "2026-10-01T10:14:02.000Z"
 }
 ```
 
@@ -142,7 +142,7 @@ Bucle en el mismo proceso que el servidor HTTP:
 
 El ritmo lo marca el limitador, no el bucle. Un `429` a mitad de un alojamiento se espera manteniendo el lease: la pausa es global y soltarlo no ayudaría.
 
-**Barrido de días pasados**: al arrancar y en cada cambio de día UTC, para cada alojamiento con `pending: true` se recalculan `pending` y `status` ignorando los días anteriores a hoy. Si no queda ningún día pendiente de hoy o posterior, pasa a `synced`, también desde `error`. Sin esto, un alojamiento atascado con días ya pasados mantendría las alertas encendidas para siempre. Los días pasados **no se borran** del documento: el tamaño no es problema (más de 100.000 días por documento) y la agrupación y `sync-status` ya los ignoran.
+**Barrido de días pasados**: al arrancar y en cada cambio de día UTC, para cada alojamiento con `pending: true` se recalculan `pending` y `status` ignorando los días anteriores a hoy. Si no queda ningún día pendiente de hoy o posterior, pasa a `synced`, también desde `error`. Sin esto, un alojamiento atascado con días ya pasados mantendría las alertas encendidas para siempre. Entre el cambio de día y el barrido, `sync-status` puede mostrar el `status` guardado con `pendingDays: 0` y `pendingRanges` vacío: es un estado transitorio aceptable que corrige el barrido. Los días pasados **no se borran** del documento: el tamaño no es problema (más de 100.000 días por documento) y la agrupación y `sync-status` ya los ignoran.
 
 **Arranque**: el servicio pone `leaseUntil: null` en todos los documentos; con una sola instancia, cualquier lease existente es de un proceso muerto. Después ejecuta el barrido.
 

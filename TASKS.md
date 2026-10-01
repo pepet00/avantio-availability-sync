@@ -136,7 +136,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T7 — `GET /accommodations/:id/sync-status`
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: exponer el estado de sincronización de un alojamiento leyendo su documento.
 

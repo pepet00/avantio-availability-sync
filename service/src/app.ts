@@ -2,6 +2,7 @@ import { fastify, LogController, type FastifyBaseLogger, type FastifyInstance } 
 import type { Config } from './config.js';
 import { handleFrameworkError, logHttpRequest, registerErrorHandlers } from './errors.js';
 import type { AccommodationRepository } from './storage/repository.js';
+import { registerStatusRoute } from './status/route.js';
 import { registerUpdatesRoute } from './updates/route.js';
 
 export interface AppDeps {
@@ -28,6 +29,7 @@ export function buildApp(config: Config, { repository, logger }: AppDeps): Fasti
 
   registerErrorHandlers(app);
   registerUpdatesRoute(app, { repository, config });
+  registerStatusRoute(app, { repository });
 
   return app;
 }
