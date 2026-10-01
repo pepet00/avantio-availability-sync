@@ -115,6 +115,19 @@ export class AccommodationRepository {
     await this.accommodations.updateOne({ _id: accommodationId, leaseUntil: held }, { $set: { leaseUntil: null } });
   }
 
+  /** Al arrancar: con una sola instancia, cualquier lease que quede es de un proceso muerto. */
+  async resetLeases(): Promise<void> {
+    await this.accommodations.updateMany({ leaseUntil: { $ne: null } }, { $set: { leaseUntil: null } });
+  }
+
+  /** Ids de los alojamientos con `pending: true` (índice `{ pending: 1, nextAttemptAt: 1 }`). */
+  pendingIds(): Promise<string[]> {
+    return this.accommodations
+      .find({ pending: true }, { projection: { _id: 1 } })
+      .map((doc) => doc._id)
+      .toArray();
+  }
+
   /**
    * Escribe el resultado del worker. `compute` calcula el cambio sobre el documento leído
    * (`null` si no hay nada que escribir) y se vuelve a llamar con el estado nuevo si otra

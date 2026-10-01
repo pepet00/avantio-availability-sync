@@ -8,6 +8,7 @@ import { createMetrics } from '../../src/metrics/registry.js';
 import { PortalClient } from '../../src/portal/client.js';
 import { connectStorage, type Storage } from '../../src/storage/mongo.js';
 import { AccommodationRepository } from '../../src/storage/repository.js';
+import { PastDaysSweep } from '../../src/sync/sweep.js';
 import { SyncWorker } from '../../src/sync/worker.js';
 import { captureLogs, type LogCapture } from './log-capture.js';
 
@@ -46,7 +47,11 @@ export async function startService(
   const repository = new AccommodationRepository(storage.accommodations);
   const metrics = createMetrics();
   const app = buildApp(config, { repository, metrics, logger: logs.logger });
+  const sweep = new PastDaysSweep({ repository, logger: logs.logger });
   try {
+    // Como src/index.ts: leases sueltos y barrido antes de escuchar y de arrancar el worker.
+    await repository.resetLeases();
+    await sweep.run();
     await app.listen({ host: '127.0.0.1', port: config.port });
   } catch (error) {
     await storage.close();
@@ -62,6 +67,7 @@ export async function startService(
     logger: logs.logger,
     config,
     metrics,
+    sweep,
     ...(random && { random }),
   });
   if (withWorker) worker.start();

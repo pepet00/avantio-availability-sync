@@ -20,6 +20,7 @@ import {
   settleWithoutPending,
   type RetryableFailure,
 } from './state.js';
+import type { PastDaysSweep } from './sweep.js';
 
 export type WorkerConfig = Pick<
   Config,
@@ -33,6 +34,8 @@ export interface WorkerDeps {
   config: WorkerConfig;
   /** `sync_retries_total`, una vez por fallo reintentable registrado. */
   metrics: WorkerMetrics;
+  /** Barrido de días pasados; el worker lo repite en cada cambio de día UTC. */
+  sweep: PastDaysSweep;
   /** Fuente de azar del backoff, como `Math.random`. */
   random?: () => number;
 }
@@ -43,16 +46,18 @@ export class SyncWorker {
   private readonly logger: FastifyBaseLogger;
   private readonly config: WorkerConfig;
   private readonly metrics: WorkerMetrics;
+  private readonly sweep: PastDaysSweep;
   private readonly random: () => number;
   private controller = new AbortController();
   private running: Promise<void> | null = null;
 
-  constructor({ repository, portal, logger, config, metrics, random = Math.random }: WorkerDeps) {
+  constructor({ repository, portal, logger, config, metrics, sweep, random = Math.random }: WorkerDeps) {
     this.repository = repository;
     this.portal = portal;
     this.logger = logger;
     this.config = config;
     this.metrics = metrics;
+    this.sweep = sweep;
     this.random = random;
   }
 
@@ -79,6 +84,7 @@ export class SyncWorker {
     for (;;) {
       let worked: boolean;
       try {
+        await this.sweep.runIfDayChanged();
         worked = await this.syncNext(signal);
       } catch (error) {
         // Una espera interrumpida por la parada no es un fallo.

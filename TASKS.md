@@ -246,7 +246,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T12 — Arranque y barrido de días pasados
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: retomar el trabajo pendiente tras un reinicio y evitar que los días ya pasados dejen un alojamiento atascado.
 

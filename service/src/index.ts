@@ -4,6 +4,7 @@ import { createMetrics } from './metrics/registry.js';
 import { PortalClient } from './portal/client.js';
 import { connectStorage, type Storage } from './storage/mongo.js';
 import { AccommodationRepository } from './storage/repository.js';
+import { PastDaysSweep } from './sync/sweep.js';
 import { SyncWorker } from './sync/worker.js';
 
 // La configuración se carga antes de nada: con un valor inválido, el servicio no arranca.
@@ -32,6 +33,12 @@ const metrics = createMetrics();
 const app = buildApp(config, { repository, metrics });
 await app.ready();
 
+// Antes de escuchar y de arrancar el worker: se sueltan los leases de un proceso anterior y se
+// barren los días pasados, para que el worker y la primera consulta partan del estado correcto.
+await repository.resetLeases();
+const sweep = new PastDaysSweep({ repository, logger: app.log });
+await sweep.run();
+
 // Fastify escribe "Server listening at …" sin `event` y sin opción para quitarlo:
 // se silencia el logger solo durante listen y se registra server.started en su lugar.
 app.log.level = 'silent';
@@ -46,5 +53,5 @@ const port = typeof address === 'object' && address !== null ? address.port : co
 app.log.info({ event: 'server.started', port }, 'Servicio escuchando');
 
 const portal = new PortalClient(config, { logger: app.log, metrics });
-const worker = new SyncWorker({ repository, portal, logger: app.log, config, metrics });
+const worker = new SyncWorker({ repository, portal, logger: app.log, config, metrics, sweep });
 worker.start();
