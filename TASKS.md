@@ -50,7 +50,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T3 — Agrupación en rangos y backoff
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: calcular como funciones puras los rangos que se enviarán al portal y el retraso de cada reintento.
 
