@@ -58,6 +58,37 @@ export function enumerateDays(from: Day, to: Day): Day[] {
   return Array.from({ length: count }, (_, i) => format(start + i));
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const HTTP_DATE_PATTERN = new RegExp(
+  `^(${WEEKDAYS.join('|')}), (\\d{2}) (${MONTHS.join('|')}) (\\d{4}) (\\d{2}):(\\d{2}):(\\d{2}) GMT$`,
+);
+
+/**
+ * Instante de una fecha HTTP en formato IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`), el que
+ * deben generar los servidores. Validada con ida y vuelta, incluido el día de la semana.
+ * Los formatos obsoletos (RFC 850 y asctime) y cualquier otro texto devuelven `null`.
+ */
+export function parseHttpDate(text: string): Date | null {
+  const match = HTTP_DATE_PATTERN.exec(text);
+  if (match === null) {
+    return null;
+  }
+  const [, weekday, dayOfMonth, monthName, year, hours, minutes, seconds] = match;
+  const month = String(MONTHS.indexOf(monthName ?? '') + 1).padStart(2, '0');
+  const day = parseDay(`${year ?? ''}-${month}-${dayOfMonth ?? ''}`);
+  const [h, m, s] = [Number(hours), Number(minutes), Number(seconds)];
+  if (day === null || h > 23 || m > 59 || s > 59) {
+    return null;
+  }
+  const epochDay = toEpochDay(day);
+  // El 1 de enero de 1970 (día 0) fue jueves.
+  if (WEEKDAYS[(((epochDay + 4) % 7) + 7) % 7] !== weekday) {
+    return null;
+  }
+  return new Date(epochDay * MS_PER_DAY + ((h * 60 + m) * 60 + s) * 1000);
+}
+
 function toEpochDay(day: Day): number {
   const match = DAY_PATTERN.exec(day);
   if (match === null) {

@@ -70,7 +70,7 @@ Tareas para implementar [`SPEC.md`](./SPEC.md), ordenadas de lo que no depende d
 
 ## T4 — Portal falso y cliente del portal
 
-- [ ] Hecha
+- [x] Hecha
 
 **Objetivo**: crear el cliente único por el que pasan todas las llamadas al portal (limitador de ventana deslizante, pausa global por `429`, timeout y clasificación del resultado) y el portal falso con el que se prueba.
 

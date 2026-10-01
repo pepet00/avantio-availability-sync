@@ -5,6 +5,7 @@ import {
   daysInRange,
   enumerateDays,
   parseDay,
+  parseHttpDate,
   todayUtc,
   type Day,
 } from '../../src/dates.js';
@@ -141,6 +142,29 @@ describe('daysInRange', () => {
 
   it('rechaza un rango invertido', () => {
     expect(() => daysInRange(day('2026-10-02'), day('2026-10-01'))).toThrow(RangeError);
+  });
+});
+
+describe('parseHttpDate (Retry-After)', () => {
+  it('lee una fecha IMF-fixdate como instante UTC', () => {
+    expect(parseHttpDate('Thu, 01 Oct 2026 10:15:30 GMT')?.toISOString()).toBe('2026-10-01T10:15:30.000Z');
+    expect(parseHttpDate('Sun, 06 Nov 1994 08:49:37 GMT')?.toISOString()).toBe('1994-11-06T08:49:37.000Z');
+    expect(parseHttpDate('Tue, 29 Feb 2028 23:59:59 GMT')?.toISOString()).toBe('2028-02-29T23:59:59.000Z');
+  });
+
+  it.each([
+    ['un día inexistente', 'Mon, 30 Feb 2026 10:00:00 GMT'],
+    ['un día de la semana que no corresponde', 'Fri, 01 Oct 2026 10:15:30 GMT'],
+    ['una hora inexistente', 'Thu, 01 Oct 2026 24:00:00 GMT'],
+    ['minutos inexistentes', 'Thu, 01 Oct 2026 10:60:00 GMT'],
+    ['otra zona horaria', 'Thu, 01 Oct 2026 10:15:30 UTC'],
+    ['el formato obsoleto RFC 850', 'Thursday, 01-Oct-26 10:15:30 GMT'],
+    ['el formato obsoleto asctime', 'Thu Oct  1 10:15:30 2026'],
+    ['ISO 8601', '2026-10-01T10:15:30Z'],
+    ['segundos', '120'],
+    ['texto vacío', ''],
+  ])('rechaza %s', (_name, text) => {
+    expect(parseHttpDate(text)).toBeNull();
   });
 });
 

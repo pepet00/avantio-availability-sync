@@ -166,11 +166,11 @@ Tras un `200`, `syncedVersion = version` solo en los días cuya versión no camb
 | `429` | Sin cambios | Pausa global hasta `Retry-After` | Sin cambios |
 | `404` o `400` | — | `nextAttemptAt = null` (`400` indica un bug: validamos igual que el portal) | `error` |
 
-Un `401` solo ocurre con la API key mal configurada; se reintenta como un error más y lo harán visible la alerta de cambios sin sincronizar y los logs. Respuestas no previstas: cualquier `2xx` es éxito; cualquier otro `4xx` se trata como `400` (`outcome=bad_request`); todo lo demás, incluido un cuerpo que no es JSON, como `server_error`.
+Un `401` solo ocurre con la API key mal configurada; se reintenta como un error más y lo harán visible la alerta de cambios sin sincronizar y los logs. Respuestas no previstas: cualquier `2xx` es éxito; cualquier otro `4xx` se trata como `400` (`outcome=bad_request`); todo lo demás, como `server_error`. Un cuerpo vacío o que no es JSON da `server_error` sea cual sea el código, salvo en un `429`, que siempre activa la pausa: el portal responde siempre JSON, así que un `2xx` sin cuerpo o una página HTML (de un proxy o de una `PORTAL_URL` mal puesta, incluido un `503` o un `404`) no viene de él. No se marca ningún día como sincronizado ni se deja el alojamiento en `error`: se reintenta.
 
 ### Límite de peticiones
 
-Todas las llamadas pasan por un único cliente con un limitador de **ventana deslizante**: solo envía si en los últimos 60 s se han enviado menos de 25 (configurable). Es más estricto que la ventana del portal, así que es seguro, y deja margen respecto a su límite de 30 para diferencias de reloj y para los GET de los tests E2E, que gastan del mismo contador. Pausa global tras un `429`: nada se envía hasta que pase `Retry-After` (60 s si falta la cabecera). La pausa vive en memoria; tras un reinicio, el siguiente `429` la restablece a costa de una petición.
+Todas las llamadas pasan por un único cliente con un limitador de **ventana deslizante**: solo envía si en los últimos 60 s se han enviado menos de 25 (configurable). Es más estricto que la ventana del portal, así que es seguro, y deja margen respecto a su límite de 30 para diferencias de reloj y para los GET de los tests E2E, que gastan del mismo contador. Pausa global tras un `429`: nada se envía hasta que pase `Retry-After`, en segundos o como fecha HTTP en formato IMF-fixdate (`Sun, 06 Nov 1994 08:49:37 GMT`). La fecha se compara con `now()` al recibirla y, si ya ha pasado, no hay pausa. Si falta la cabecera o no se puede interpretar (incluidos los formatos de fecha obsoletos RFC 850 y asctime), 60 s. La pausa vive en memoria; tras un reinicio, el siguiente `429` la restablece a costa de una petición.
 
 ### Timeouts
 
@@ -222,7 +222,7 @@ JSON por salida estándar con `pino`, nivel configurable. Cada línea lleva `eve
 | `update.rejected` | info | Validación fallida (`400`), con su código |
 | `sync.put.succeeded` | info | PUT con `200` |
 | `sync.put.failed` | warn | PUT con `5xx`, `401`, timeout o error de conexión |
-| `portal.rate_limited` | warn | `429`, con `retryAfter` |
+| `portal.rate_limited` | warn | `429`, con `retryAfter`: la pausa aplicada, en segundos como la cabecera (con decimales si viene de una fecha HTTP) |
 | `sync.accommodation.failing` | error | Cruza el umbral de fallos (una vez, no en cada intento) |
 | `sync.accommodation.error` | error | Error permanente (`404` o `400`) |
 | `worker.lease_expired` | warn | Se retoma un alojamiento cuyo lease caducó con el proceso vivo (tardó más de 2 min) |
