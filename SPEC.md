@@ -32,7 +32,7 @@ Servicio que recibe cambios de disponibilidad y precio de alojamientos por HTTP,
 
 - No se comprueba si el alojamiento existe en el portal: haría depender la aceptación de que el portal esté disponible y gastaría cuota. Si no existe, acabará en `error`.
 - Un día cuyos valores coinciden con los guardados no cambia de versión ni se reenvía: la cuota es escasa.
-- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`) aunque el update no cambie ningún valor, porque es la única forma de pedir un nuevo intento; esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`) salvo si ya está en `failing`, para no gastar cuota con el portal caído; tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5). Si el update adelanta el reintento mientras un PUT está en camino y ese PUT falla, manda el fallo: se aplica su backoff y el adelanto se pierde, porque el fallo es información más nueva sobre el portal.
+- Efecto sobre un alojamiento en reintento: en `error`, vuelve a `pending` (`attempts = 0`, `nextAttemptAt = ahora`) aunque el update no cambie ningún valor, porque es la única forma de pedir un nuevo intento; en los demás estados, un update que no cambia ningún valor no adelanta el reintento, porque no hay nada nuevo que enviar; en `failing` no se toca `nextAttemptAt`, sea cual sea el último fallo, para no gastar cuota con el portal caído; esperando por `5xx`/`401`, se adelanta el reintento (`nextAttemptAt = ahora`); tras un timeout o error de conexión, `nextAttemptAt = max(ahora, lastError.at + margen)` (invariante 5). Si el update adelanta el reintento mientras un PUT está en camino y ese PUT falla, manda el fallo: se aplica su backoff y el adelanto se pierde, porque el fallo es información más nueva sobre el portal.
 
 Respuesta `202`, solo cuando el cambio está escrito en MongoDB:
 
@@ -164,7 +164,7 @@ Tras un `200`, `syncedVersion = version` solo en los días cuya versión no camb
 |---|---|---|---|
 | `200` | 0 | Inmediato si quedan pendientes | `synced` o `pending` |
 | `5xx` o `401` | +1 | Backoff `min(2 s × 2^(attempts−1), 5 min)` con *full jitter* | `pending` o `failing` (5 o más fallos) |
-| Timeout o error de conexión | +1 | `max(margen de espera, backoff)` | `pending` o `failing` |
+| Timeout o error de conexión | +1 | `max(margen de espera, backoff)`, con el backoff ya con jitter (no su tope) | `pending` o `failing` |
 | `429` | Sin cambios | Pausa global hasta `Retry-After` | Sin cambios |
 | `404` o `400` | Sin cambios | `nextAttemptAt = null` (`400` indica un bug: validamos igual que el portal) | `error` |
 
